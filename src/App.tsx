@@ -11,8 +11,8 @@ const formatCurrency = (value: number) => {
 export default function App() {
   const [credit, setCredit] = useState<number>(100000);
   const [term, setTerm] = useState<number>(180);
-  const [adminFee, setAdminFee] = useState<number>(15);
-  const [reserveFund, setReserveFund] = useState<number>(2);
+  const [adminFee, setAdminFee] = useState<string>('15');
+  const [reserveFund, setReserveFund] = useState<string>('2');
   const [plan, setPlan] = useState<'integral' | 'reduzido25' | 'reduzido40'>('integral');
   const [monthsPaid, setMonthsPaid] = useState<number>(1);
   
@@ -38,7 +38,9 @@ export default function App() {
     const LP_pct = bidType === 'nenhum' ? 0 : bidType === 'embutido' ? 0 : bidType === 'fixo' ? 15 : proprioPct;
 
     const safeTerm = term > 0 ? term : 1;
-    const totalFees = credit * (adminFee + reserveFund) / 100;
+    const adminFeeNum = Number(adminFee.replace(',', '.')) || 0;
+    const reserveFundNum = Number(reserveFund.replace(',', '.')) || 0;
+    const totalFees = credit * (adminFeeNum + reserveFundNum) / 100;
     const monthlyFee = totalFees / safeTerm;
     const fullAmortization = credit / safeTerm;
     
@@ -97,8 +99,8 @@ export default function App() {
           <p className="text-zinc-400 mt-2">Alta performance, precisão matemática e clareza comercial.</p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-7 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
+          <div className="md:col-span-7 space-y-6">
             <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
               <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Calculator className="w-5 h-5 text-emerald-400" />
@@ -171,24 +173,20 @@ export default function App() {
                 <div>
                   <label className="text-xs text-zinc-500 block mb-1">Taxa de Administração (%)</label>
                   <input 
-                    type="number" 
-                    value={adminFee === 0 ? '' : adminFee} 
-                    onChange={(e) => setAdminFee(Number(e.target.value))}
-                    onKeyDown={(e) => {
-                      if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
-                    }}
+                    type="text" 
+                    inputMode="decimal"
+                    value={adminFee} 
+                    onChange={(e) => setAdminFee(e.target.value.replace(/[^0-9.,]/g, ''))}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
                 <div>
                   <label className="text-xs text-zinc-500 block mb-1">Fundo de Reserva (%)</label>
                   <input 
-                    type="number" 
-                    value={reserveFund === 0 ? '' : reserveFund} 
-                    onChange={(e) => setReserveFund(Number(e.target.value))}
-                    onKeyDown={(e) => {
-                      if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
-                    }}
+                    type="text" 
+                    inputMode="decimal"
+                    value={reserveFund} 
+                    onChange={(e) => setReserveFund(e.target.value.replace(/[^0-9.,]/g, ''))}
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -201,26 +199,34 @@ export default function App() {
                 Estratégia de Lance
               </h2>
 
-              <div className="space-y-4 mb-8">
-                <div className="flex justify-between items-end">
-                  <label className="text-sm font-medium text-zinc-400">Mês da Contemplação</label>
-                  <span className="text-lg font-bold text-cyan-400">Mês {monthsPaid}</span>
+              <div className="space-y-3 mb-8">
+                <label className="text-sm font-medium text-zinc-400 block">Mês da Contemplação</label>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    inputMode="numeric"
+                    value={monthsPaid === 0 ? '' : monthsPaid} 
+                    onChange={(e) => {
+                      const val = Number(e.target.value.replace(/\D/g, ''));
+                      if (val < term) {
+                        setMonthsPaid(val);
+                      }
+                    }}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-lg focus:outline-none focus:border-cyan-500 text-cyan-400 font-bold"
+                    placeholder="Ex: 5"
+                  />
+                  <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none">
+                    <span className="text-zinc-500 font-medium">Mês</span>
+                  </div>
                 </div>
-                <input 
-                  type="range" 
-                  min="1" max={term - 1} step="1" 
-                  value={monthsPaid} 
-                  onChange={(e) => setMonthsPaid(Number(e.target.value))}
-                  className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-                />
                 <p className="text-xs text-zinc-500">
-                  Simula o pagamento de {monthsPaid} parcela(s) antes do lance.
+                  Simula o pagamento de {monthsPaid || 0} parcela(s) antes do lance.
                 </p>
               </div>
 
-              <div className="space-y-3 mb-6">
-                <label className="text-sm font-medium text-zinc-400">Tipo de Lance</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div className="space-y-4 mb-8">
+                <label className="text-sm font-medium text-zinc-400 block text-center">Selecione o Tipo de Lance</label>
+                <div className="flex flex-wrap justify-center gap-3">
                   {[
                     { id: 'nenhum', label: 'Sem Lance' },
                     { id: 'embutido', label: 'Embutido' },
@@ -230,10 +236,10 @@ export default function App() {
                     <button
                       key={b.id}
                       onClick={() => setBidType(b.id as any)}
-                      className={`py-2 px-2 rounded-lg text-xs font-medium transition-colors ${
+                      className={`py-2.5 px-5 rounded-xl text-sm font-medium transition-all duration-200 ${
                         bidType === b.id 
-                          ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' 
-                          : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:bg-zinc-800'
+                          ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_15px_rgba(6,182,212,0.15)] scale-105' 
+                          : 'bg-zinc-950 border border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:scale-105'
                       }`}
                     >
                       {b.label}
@@ -243,10 +249,11 @@ export default function App() {
               </div>
 
               {bidType === 'embutido' && (
-                <div className="space-y-4 mb-6 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                <div className="space-y-4 mb-6 p-5 bg-zinc-950/50 rounded-xl border border-cyan-500/20 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
                   <div className="flex justify-between items-end">
-                    <label className="text-sm font-medium text-zinc-400">Lance Embutido (%)</label>
-                    <span className="text-lg font-bold">{embutidoPct}%</span>
+                    <label className="text-sm font-medium text-zinc-300">Lance Embutido (%)</label>
+                    <span className="text-xl font-bold text-cyan-400">{embutidoPct}%</span>
                   </div>
                   <input 
                     type="range" 
@@ -255,15 +262,54 @@ export default function App() {
                     onChange={(e) => setEmbutidoPct(Number(e.target.value))}
                     className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                   />
-                  <p className="text-xs text-zinc-500">Máximo de 15% do crédito.</p>
+                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 mt-4 flex gap-3 items-start">
+                    <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-zinc-300 space-y-1">
+                      <p><strong>Limite Máximo:</strong> 15% do valor do crédito.</p>
+                      <p><strong>Impacto:</strong> O valor do lance ({formatCurrency(credit * (embutidoPct / 100))}) será descontado do seu crédito, resultando em um Crédito Líquido de <strong className="text-emerald-400">{formatCurrency(credit - (credit * (embutidoPct / 100)))}</strong>.</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {bidType === 'fixo' && (
+                <div className="space-y-4 mb-6 p-5 bg-zinc-950/50 rounded-xl border border-cyan-500/20 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+                  <h3 className="text-sm font-medium text-zinc-300 mb-2">Composição do Lance Fixo (30%)</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-1">Lance Embutido (15%)</p>
+                      <p className="text-lg font-bold text-cyan-400">{formatCurrency(credit * 0.15)}</p>
+                    </div>
+                    <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-800">
+                      <p className="text-xs text-zinc-500 mb-1">Recurso Próprio (15%)</p>
+                      <p className="text-lg font-bold text-cyan-400">{formatCurrency(credit * 0.15)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 mt-2 flex gap-3 items-start">
+                    <Info className="w-5 h-5 text-cyan-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-zinc-300">
+                      O lance fixo é estritamente composto por 15% embutido (reduz o crédito líquido para <strong className="text-emerald-400">{formatCurrency(credit * 0.85)}</strong>) e 15% pagos com recursos próprios.
+                    </p>
+                  </div>
                 </div>
               )}
 
               {bidType === 'livre' && (
-                <div className="space-y-4 mb-6 p-4 bg-zinc-950 rounded-xl border border-zinc-800">
+                <div className="space-y-4 mb-6 p-5 bg-zinc-950/50 rounded-xl border border-cyan-500/20 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+                  
+                  <div className="bg-zinc-900 p-3 rounded-lg border border-zinc-800 mb-4 flex justify-between items-center">
+                    <div>
+                      <p className="text-xs text-zinc-500 mb-1">Lance Embutido Obrigatório</p>
+                      <p className="text-sm font-medium text-zinc-300">Fixado em 15%</p>
+                    </div>
+                    <p className="text-lg font-bold text-cyan-400">{formatCurrency(credit * 0.15)}</p>
+                  </div>
+
                   <div className="flex justify-between items-end">
-                    <label className="text-sm font-medium text-zinc-400">Recurso Próprio (%)</label>
-                    <span className="text-lg font-bold">{proprioPct}%</span>
+                    <label className="text-sm font-medium text-zinc-300">Recurso Próprio (%)</label>
+                    <span className="text-xl font-bold text-cyan-400">{proprioPct}%</span>
                   </div>
                   <input 
                     type="range" 
@@ -272,7 +318,11 @@ export default function App() {
                     onChange={(e) => setProprioPct(Number(e.target.value))}
                     className="w-full h-2 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-cyan-500"
                   />
-                  <p className="text-xs text-zinc-500">Soma-se aos 15% de lance embutido obrigatório.</p>
+                  <div className="flex justify-between text-xs text-zinc-500 mt-1">
+                    <span>0%</span>
+                    <span>Total Ofertado: {15 + proprioPct}%</span>
+                    <span>85%</span>
+                  </div>
                 </div>
               )}
 
@@ -309,7 +359,7 @@ export default function App() {
             </section>
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="md:col-span-5">
             <div className="sticky top-8 space-y-6">
               <div className="bg-gradient-to-b from-zinc-800 to-zinc-900 border border-zinc-700 rounded-3xl p-1 shadow-2xl">
                 <div className="bg-zinc-900 rounded-[22px] p-6 h-full">
