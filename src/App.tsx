@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Calculator, DollarSign, Calendar, TrendingDown, Percent, ArrowRight, Info, Car } from 'lucide-react';
+import { Calculator, DollarSign, Calendar, TrendingDown, Percent, ArrowRight, Info, Car, Plus, Trash2 } from 'lucide-react';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('pt-BR', {
@@ -8,11 +8,19 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
+interface Quota {
+  id: string;
+  group: string;
+  credit: number;
+  term: number;
+  adminFee: string;
+  reserveFund: string;
+}
+
 export default function App() {
-  const [credit, setCredit] = useState<number>(0);
-  const [term, setTerm] = useState<number>(0);
-  const [adminFee, setAdminFee] = useState<string>('');
-  const [reserveFund, setReserveFund] = useState<string>('');
+  const [quotas, setQuotas] = useState<Quota[]>([
+    { id: '1', group: '', credit: 0, term: 0, adminFee: '', reserveFund: '' }
+  ]);
   const [plan, setPlan] = useState<'integral' | 'reduzido25' | 'reduzido40'>('integral');
   const [monthsPaid, setMonthsPaid] = useState<number>(0);
   
@@ -22,7 +30,26 @@ export default function App() {
   
   const [postContemplation, setPostContemplation] = useState<'diluido' | 'normal'>('diluido');
 
+  const addQuota = () => {
+    if (quotas.length < 6) {
+      setQuotas([...quotas, { id: Date.now().toString(), group: '', credit: 0, term: 0, adminFee: '', reserveFund: '' }]);
+    }
+  };
+
+  const removeQuota = (id: string) => {
+    if (quotas.length > 1) {
+      setQuotas(quotas.filter(q => q.id !== id));
+    }
+  };
+
+  const updateQuota = (id: string, field: keyof Quota, value: string | number) => {
+    setQuotas(quotas.map(q => q.id === id ? { ...q, [field]: value } : q));
+  };
+
+  const maxTerm = useMemo(() => quotas.reduce((max, q) => Math.max(max, q.term), 0), [quotas]);
+
   const {
+    totalCredit,
     currentInstallment,
     netCredit,
     newInstallment,
@@ -37,57 +64,86 @@ export default function App() {
     const LE_pct = bidType === 'nenhum' ? 0 : bidType === 'embutido' ? embutidoPct : 15;
     const LP_pct = bidType === 'nenhum' ? 0 : bidType === 'embutido' ? 0 : bidType === 'fixo' ? 15 : proprioPct;
 
-    const safeTerm = term > 0 ? term : 1;
-    const adminFeeNum = Number(adminFee.replace(',', '.')) || 0;
-    const reserveFundNum = Number(reserveFund.replace(',', '.')) || 0;
-    const totalFees = credit * (adminFeeNum + reserveFundNum) / 100;
-    const monthlyFee = totalFees / safeTerm;
-    const fullAmortization = credit / safeTerm;
-    
-    const reducedAmortization = fullAmortization * (1 - R);
-    const currentInstallment = reducedAmortization + monthlyFee;
+    let sumCredit = 0;
+    let sumCurrentInstallment = 0;
+    let sumNetCredit = 0;
+    let sumNewInstallment = 0;
+    let maxNewRemainingMonths = 0;
+    let sumLeVal = 0;
+    let sumLpVal = 0;
+    let sumTotalBid = 0;
+    let sumSaldoDevedor = 0;
+    let sumResidueTotal = 0;
 
-    const unpaidCredit = credit - (monthsPaid * reducedAmortization);
-    const unpaidFees = totalFees - (monthsPaid * monthlyFee);
-    const saldoDevedor = unpaidCredit + unpaidFees;
-    
-    const residueTotal = (fullAmortization * R) * monthsPaid;
+    quotas.forEach(q => {
+      const safeTerm = q.term > 0 ? q.term : 1;
+      const adminFeeNum = Number(q.adminFee.replace(',', '.')) || 0;
+      const reserveFundNum = Number(q.reserveFund.replace(',', '.')) || 0;
+      
+      const totalFees = q.credit * (adminFeeNum + reserveFundNum) / 100;
+      const monthlyFee = totalFees / safeTerm;
+      const fullAmortization = q.credit / safeTerm;
+      
+      const reducedAmortization = fullAmortization * (1 - R);
+      const qCurrentInstallment = reducedAmortization + monthlyFee;
 
-    const remainingMonths = term - monthsPaid;
-    const recalculatedInstallment = remainingMonths > 0 ? saldoDevedor / remainingMonths : 0;
+      const qMonthsPaid = Math.min(monthsPaid, q.term);
 
-    const leVal = credit * (LE_pct / 100);
-    const lpVal = credit * (LP_pct / 100);
-    const totalBid = leVal + lpVal;
-    const netCredit = credit - leVal;
+      const unpaidCredit = q.credit - (qMonthsPaid * reducedAmortization);
+      const unpaidFees = totalFees - (qMonthsPaid * monthlyFee);
+      const qSaldoDevedor = Math.max(0, unpaidCredit + unpaidFees);
+      
+      const qResidueTotal = (fullAmortization * R) * qMonthsPaid;
+      const remainingMonths = q.term - qMonthsPaid;
+      const recalculatedInstallment = remainingMonths > 0 ? qSaldoDevedor / remainingMonths : 0;
 
-    let newSD = Math.max(0, saldoDevedor - totalBid);
-    let newInstallment = 0;
-    let newRemainingMonths = 0;
+      const qLeVal = q.credit * (LE_pct / 100);
+      const qLpVal = q.credit * (LP_pct / 100);
+      const qTotalBid = qLeVal + qLpVal;
+      const qNetCredit = q.credit - qLeVal;
 
-    if (bidType === 'nenhum') {
-      newRemainingMonths = remainingMonths;
-      newInstallment = recalculatedInstallment;
-    } else if (postContemplation === 'diluido') {
-      newRemainingMonths = remainingMonths;
-      newInstallment = newRemainingMonths > 0 ? newSD / newRemainingMonths : 0;
-    } else {
-      newInstallment = recalculatedInstallment;
-      newRemainingMonths = newInstallment > 0 ? Math.ceil(newSD / newInstallment) : 0;
-    }
+      let newSD = Math.max(0, qSaldoDevedor - qTotalBid);
+      let qNewInstallment = 0;
+      let qNewRemainingMonths = 0;
+
+      if (bidType === 'nenhum') {
+        qNewRemainingMonths = remainingMonths;
+        qNewInstallment = recalculatedInstallment;
+      } else if (postContemplation === 'diluido') {
+        qNewRemainingMonths = remainingMonths;
+        qNewInstallment = qNewRemainingMonths > 0 ? newSD / qNewRemainingMonths : 0;
+      } else {
+        qNewInstallment = recalculatedInstallment;
+        qNewRemainingMonths = qNewInstallment > 0 ? Math.ceil(newSD / qNewInstallment) : 0;
+      }
+
+      sumCredit += q.credit;
+      sumCurrentInstallment += qCurrentInstallment;
+      sumNetCredit += qNetCredit;
+      sumNewInstallment += qNewInstallment;
+      if (qNewRemainingMonths > maxNewRemainingMonths) {
+        maxNewRemainingMonths = qNewRemainingMonths;
+      }
+      sumLeVal += qLeVal;
+      sumLpVal += qLpVal;
+      sumTotalBid += qTotalBid;
+      sumSaldoDevedor += qSaldoDevedor;
+      sumResidueTotal += qResidueTotal;
+    });
 
     return {
-      currentInstallment,
-      netCredit,
-      newInstallment,
-      newRemainingMonths,
-      leVal,
-      lpVal,
-      totalBid,
-      saldoDevedor,
-      residueTotal
+      totalCredit: sumCredit,
+      currentInstallment: sumCurrentInstallment,
+      netCredit: sumNetCredit,
+      newInstallment: sumNewInstallment,
+      newRemainingMonths: maxNewRemainingMonths,
+      leVal: sumLeVal,
+      lpVal: sumLpVal,
+      totalBid: sumTotalBid,
+      saldoDevedor: sumSaldoDevedor,
+      residueTotal: sumResidueTotal
     };
-  }, [credit, term, adminFee, reserveFund, plan, monthsPaid, bidType, embutidoPct, proprioPct, postContemplation]);
+  }, [quotas, plan, monthsPaid, bidType, embutidoPct, proprioPct, postContemplation]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 p-4 md:p-8 font-sans selection:bg-amber-500/30">
@@ -107,48 +163,54 @@ export default function App() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-8">
           <div className="md:col-span-7 space-y-6">
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-              <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
-                <Calculator className="w-5 h-5 text-amber-400" />
-                Dados do Plano
-              </h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Calculator className="w-5 h-5 text-amber-400" />
+                  Composição do Crédito
+                </h2>
+                {quotas.length < 6 && (
+                  <button onClick={addQuota} className="text-sm bg-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg font-medium hover:bg-amber-500/30 transition-colors flex items-center gap-1">
+                    <Plus className="w-4 h-4" /> Adicionar Cota
+                  </button>
+                )}
+              </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-400">Valor do Crédito</label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <span className="text-slate-500 font-medium text-lg">R$</span>
+              <div className="space-y-4 mb-6">
+                {quotas.map((q, index) => (
+                  <div key={q.id} className="p-4 bg-slate-950 border border-slate-800 rounded-xl relative">
+                    {quotas.length > 1 && (
+                      <button onClick={() => removeQuota(q.id)} className="absolute top-3 right-3 text-slate-500 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    <h3 className="text-sm font-medium text-slate-400 mb-3">Cota {index + 1}</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                      <div className="space-y-1 col-span-2 sm:col-span-1 lg:col-span-1">
+                        <label className="text-xs text-slate-500">Grupo</label>
+                        <input type="text" value={q.group} onChange={(e) => updateQuota(q.id, 'group', e.target.value)} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="Ex: 2001" />
+                      </div>
+                      <div className="space-y-1 col-span-2 sm:col-span-2 lg:col-span-2">
+                        <label className="text-xs text-slate-500">Crédito (R$)</label>
+                        <input type="text" inputMode="numeric" value={q.credit === 0 ? '' : q.credit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, '');
+                          updateQuota(q.id, 'credit', Number(val) / 100);
+                        }} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-amber-400 font-bold" placeholder="0,00" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-500">Prazo</label>
+                        <input type="text" inputMode="numeric" value={q.term === 0 ? '' : q.term} onChange={(e) => updateQuota(q.id, 'term', Number(e.target.value.replace(/\D/g, '')))} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="180" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-500">Tx. Adm(%)</label>
+                        <input type="text" inputMode="decimal" value={q.adminFee} onChange={(e) => updateQuota(q.id, 'adminFee', e.target.value.replace(/[^0-9.,]/g, ''))} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="0,00" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-slate-500">F. Res(%)</label>
+                        <input type="text" inputMode="decimal" value={q.reserveFund} onChange={(e) => updateQuota(q.id, 'reserveFund', e.target.value.replace(/[^0-9.,]/g, ''))} className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500 text-white" placeholder="0,00" />
+                      </div>
                     </div>
-                    <input 
-                      type="text" 
-                      inputMode="numeric"
-                      value={credit === 0 ? '' : credit.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, '');
-                        setCredit(Number(val) / 100);
-                      }}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-12 pr-4 py-3 text-xl font-bold text-amber-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
-                      placeholder="0,00"
-                    />
                   </div>
-                </div>
-
-                <div className="space-y-3">
-                  <label className="text-sm font-medium text-slate-400">Prazo (Meses)</label>
-                  <input 
-                    type="text" 
-                    inputMode="numeric"
-                    value={term === 0 ? '' : term} 
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, '');
-                      const newTerm = Number(val);
-                      setTerm(newTerm);
-                      if (monthsPaid >= newTerm && newTerm > 0) setMonthsPaid(Math.max(1, newTerm - 1));
-                    }}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-xl font-bold text-white focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all"
-                    placeholder="180"
-                  />
-                </div>
+                ))}
               </div>
 
               <div className="space-y-3 mb-6">
@@ -181,29 +243,6 @@ export default function App() {
                   ))}
                 </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
-                <div>
-                  <label className="text-xs text-slate-500 block mb-1">Taxa de Administração (%)</label>
-                  <input 
-                    type="text" 
-                    inputMode="decimal"
-                    value={adminFee} 
-                    onChange={(e) => setAdminFee(e.target.value.replace(/[^0-9.,]/g, ''))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 block mb-1">Fundo de Reserva (%)</label>
-                  <input 
-                    type="text" 
-                    inputMode="decimal"
-                    value={reserveFund} 
-                    onChange={(e) => setReserveFund(e.target.value.replace(/[^0-9.,]/g, ''))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
             </section>
 
             <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
@@ -223,8 +262,8 @@ export default function App() {
                         value={monthsPaid === 0 ? '' : monthsPaid} 
                         onChange={(e) => {
                           const val = Number(e.target.value.replace(/\D/g, ''));
-                          if (term > 0 && val >= term) {
-                            setMonthsPaid(Math.max(1, term - 1));
+                          if (maxTerm > 0 && val >= maxTerm) {
+                            setMonthsPaid(Math.max(1, maxTerm - 1));
                           } else {
                             setMonthsPaid(val);
                           }
@@ -285,7 +324,7 @@ export default function App() {
                         <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                         <div className="text-xs text-slate-300 space-y-1">
                           <p><strong>Limite Máximo:</strong> 15% do valor do crédito.</p>
-                          <p><strong>Impacto:</strong> O valor do lance ({formatCurrency(credit * (embutidoPct / 100))}) será descontado do seu crédito, resultando em um Crédito Líquido de <strong className="text-amber-400">{formatCurrency(credit - (credit * (embutidoPct / 100)))}</strong>.</p>
+                          <p><strong>Impacto:</strong> O valor do lance ({formatCurrency(totalCredit * (embutidoPct / 100))}) será descontado do seu crédito, resultando em um Crédito Líquido de <strong className="text-amber-400">{formatCurrency(totalCredit - (totalCredit * (embutidoPct / 100)))}</strong>.</p>
                         </div>
                       </div>
                     </div>
@@ -298,17 +337,17 @@ export default function App() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
                           <p className="text-xs text-slate-500 mb-1">Lance Embutido (15%)</p>
-                          <p className="text-lg font-bold text-blue-400">{formatCurrency(credit * 0.15)}</p>
+                          <p className="text-lg font-bold text-blue-400">{formatCurrency(totalCredit * 0.15)}</p>
                         </div>
                         <div className="bg-slate-900 p-3 rounded-lg border border-slate-800">
                           <p className="text-xs text-slate-500 mb-1">Recurso Próprio (15%)</p>
-                          <p className="text-lg font-bold text-blue-400">{formatCurrency(credit * 0.15)}</p>
+                          <p className="text-lg font-bold text-blue-400">{formatCurrency(totalCredit * 0.15)}</p>
                         </div>
                       </div>
                       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 mt-2 flex gap-3 items-start">
                         <Info className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
                         <p className="text-xs text-slate-300">
-                          O lance fixo é estritamente composto por 15% embutido (reduz o crédito líquido para <strong className="text-amber-400">{formatCurrency(credit * 0.85)}</strong>) e 15% pagos com recursos próprios.
+                          O lance fixo é estritamente composto por 15% embutido (reduz o crédito líquido para <strong className="text-amber-400">{formatCurrency(totalCredit * 0.85)}</strong>) e 15% pagos com recursos próprios.
                         </p>
                       </div>
                     </div>
@@ -323,7 +362,7 @@ export default function App() {
                           <p className="text-xs text-slate-500 mb-1">Lance Embutido Obrigatório</p>
                           <p className="text-sm font-medium text-slate-300">Fixado em 15%</p>
                         </div>
-                        <p className="text-lg font-bold text-blue-400">{formatCurrency(credit * 0.15)}</p>
+                        <p className="text-lg font-bold text-blue-400">{formatCurrency(totalCredit * 0.15)}</p>
                       </div>
 
                       <div className="flex justify-between items-end">
@@ -347,7 +386,7 @@ export default function App() {
                           <p className="text-sm text-blue-400 font-medium mb-1">Total Ofertado ({15 + proprioPct}%)</p>
                           <p className="text-xs text-slate-400">Embutido + Próprio</p>
                         </div>
-                        <p className="text-2xl font-bold text-blue-400">{formatCurrency(credit * ((15 + proprioPct) / 100))}</p>
+                        <p className="text-2xl font-bold text-blue-400">{formatCurrency(totalCredit * ((15 + proprioPct) / 100))}</p>
                       </div>
                     </div>
                   )}
@@ -408,6 +447,14 @@ export default function App() {
                   <div className="space-y-4">
                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
                       <div>
+                        <p className="text-xs text-slate-500 font-medium">Crédito Total</p>
+                        <p className="text-lg font-bold text-white">{formatCurrency(totalCredit)}</p>
+                      </div>
+                      <Calculator className="w-6 h-6 text-slate-600" />
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center">
+                      <div>
                         <p className="text-xs text-slate-500 font-medium">Crédito Líquido</p>
                         <p className="text-lg font-bold text-amber-400">{formatCurrency(netCredit)}</p>
                       </div>
@@ -463,7 +510,7 @@ export default function App() {
               <div className="bg-slate-900/50 border border-slate-800/50 rounded-2xl p-4 flex gap-3 text-sm text-slate-400">
                 <Info className="w-5 h-5 text-slate-500 shrink-0" />
                 <p>
-                  A Taxa de Administração ({adminFee}%) e Fundo de Reserva ({reserveFund}%) incidem sobre 100% do crédito. 
+                  A Taxa de Administração e Fundo de Reserva incidem sobre 100% do crédito de cada cota. 
                   {plan !== 'integral' && ` O resíduo acumulado até a contemplação (${formatCurrency(residueTotal)}) foi redistribuído no saldo devedor.`}
                 </p>
               </div>
